@@ -532,3 +532,23 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int
+setnice(int pid, int nice)
+{
+  if( nice < 0 || nice > 30)
+    return -1;
+
+  struct proc *p;
+  acquire(&ptable.lock);
+  for( p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid==pid){
+      p->priority = nice;
+      release(&ptable.lock);
+      return 0;
+    }
+  }
+
+  release(&ptable.lock);
+  return -1;
+}

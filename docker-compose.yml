@@ -10,3 +10,4 @@ services:
             - ./xv6-proj1:/home/os-projects/xv6-proj1
             - ./xv6-proj2:/home/os-projects/xv6-proj2
             - ./xv6-proj3:/home/os-projects/xv6-proj3
+            - ./xv6-proj4:/home/os-projects/xv6-proj4

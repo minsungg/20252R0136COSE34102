@@ -148,6 +148,7 @@ userinit(void)
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
 
+  p->priority=5;
   p->state = RUNNABLE;
 
   release(&ptable.lock);
@@ -215,6 +216,7 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->priority = curproc->priority;
 
   release(&ptable.lock);
 
@@ -542,9 +544,13 @@ setnice(int pid, int nice)
     struct proc *p;
     acquire(&ptable.lock);
 
-    /* ******************** */
-    /* * WRITE YOUR CODE    */
-    /* ******************** */
+    for(p=ptable.proc; p<&ptable.proc[NPROC]; p++) {
+        if(p->pid==pid) {
+          p->priority=nice;
+          release(&ptable.lock);
+          return 0;
+        }
+    }
 
     release(&ptable.lock);
     return -1;
@@ -556,9 +562,12 @@ getnice(int pid)
     struct proc *p;
     acquire(&ptable.lock);
     
-    /* ******************** */
-    /* * WRITE YOUR CODE    */
-    /* ******************** */
+    for(p=ptable.proc; p<&ptable.proc[NPROC]; p++) {
+        if(p->pid==pid) {
+          release(&ptable.lock);
+          return p->priority;
+        }
+    }
 
     release(&ptable.lock);
     return -1;
@@ -567,14 +576,24 @@ getnice(int pid)
 void
 ps(void)
 {
+    char procstate_list[6][10]={"UNUSED", "EMBRYO", "SLEEPING", "RUNNABLE", "RUNNING", "ZOMBIE"};
+    int ppid;
     struct proc *p;
     acquire(&ptable.lock);
     cprintf("name\tpid\tppid\tmem\tprio\tstate\n");
 
-    /* ******************** */
-    /* * WRITE YOUR CODE    */
-    /* ******************** */
+    for(p=ptable.proc; p<&ptable.proc[NPROC]; p++) {
+      //Debugging
+      if(p->state==UNUSED) continue;
+
+      // if p->parent is null...?
+      ppid=-1;
+      if(p->parent) ppid=p->parent->pid;
+      
+      cprintf("%s\t%d\t%d\t%d\t%d\t%s\n", p->name, p->pid, ppid, p->sz, p->priority, procstate_list[p->state]);
+    }
 
     release(&ptable.lock);
     return;
 }
+

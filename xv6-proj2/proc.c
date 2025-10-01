@@ -20,6 +20,47 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
+// *** Assignment 2 ***
+// Priority queue defined
+struct proc *priority_queue[30];
+int len=0;
+void swap(int i, int j) {
+  struct proc *tmp=priority_queue[i];
+  priority_queue[i]=priority_queue[j];
+  priority_queue[j]=tmp;
+}
+void enque(struct proc *p) {
+  // enque process
+  priority_queue[len++]=p;
+  
+  // 0 ~ len-1 array
+  // bubble sort by monotomically increasing (w.r.t. priority)
+  // if same, w.r.t. pid
+  for(int i=len-1; i>0; i--) {
+    if(priority_queue[i]->priority>priority_queue[i-1]->priority) {
+      swap(i, i-1);
+    } else if((priority_queue[i]->priority==priority_queue[i-1]->priority)&&(priority_queue[i]->pid<priority_queue[i-1]->pid)) {
+      swap(i, i-1);
+    }
+  }
+}
+struct proc* deque() {
+  if(len>0) {
+    for(int i=0; i<len; i++) {
+      if(priority_queue[len-1-i]->state==RUNNABLE) {
+        struct proc *tmp=priority_queue[len-1-i];
+        for(int j=len-1-i;j<len; j++) {
+          priority_queue[j]=priority_queue[j+1];
+        }
+        len--;
+        return tmp;
+      }
+    }
+  }
+  return 0;
+}
+// *** Assignment 2 ***
+
 void
 pinit(void)
 {
@@ -151,6 +192,8 @@ userinit(void)
   acquire(&ptable.lock);
 
   p->state = RUNNABLE;
+  enque(p);
+  cprintf("init process created\n");
 
   release(&ptable.lock);
 }
@@ -217,6 +260,14 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  if(np->parent) {
+    if(np->parent->priority>=15) {
+      np->priority=(np->parent->priority)/2;
+    } else {
+      np->priority=(np->parent->priority)+1;
+    }
+  }
+  enque(np);
 
   release(&ptable.lock);
 
@@ -334,10 +385,10 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
 
+    p=deque();
+
+    if(p) {
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
@@ -348,12 +399,16 @@ scheduler(void)
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
+      if(p->state==RUNNABLE||p->state==EMBRYO||p->state==SLEEPING) {
+        enque(p);
+      }
+
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
     }
-    release(&ptable.lock);
 
+    release(&ptable.lock);
   }
 }
 
@@ -546,6 +601,15 @@ setnice(int pid, int nice)
   for( p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->pid==pid){
       p->priority = nice;
+
+      for(int i=len-1; i>0; i--) {
+        if(priority_queue[i]->priority>priority_queue[i-1]->priority) {
+          swap(i, i-1);
+        } else if((priority_queue[i]->priority==priority_queue[i-1]->priority)&&(priority_queue[i]->pid<priority_queue[i-1]->pid)) {
+          swap(i, i-1);
+        }
+      }
+
       release(&ptable.lock);
       return 0;
     }

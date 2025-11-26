@@ -318,7 +318,6 @@ copyuvm(pde_t *pgdir, uint sz)
   pde_t *d;
   pte_t *pte;
   uint pa, i, flags;
-  char *mem;
 
   if((d = setupkvm()) == 0)
     return 0;
@@ -327,16 +326,19 @@ copyuvm(pde_t *pgdir, uint sz)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
+
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
-      kfree(mem);
+
+    if(mappages(d, (void*)i, PGSIZE, pa, (flags & ~PTE_W)) < 0) {
       goto bad;
     }
+    *pte &= ~PTE_W;
+
+    inc_refcount(pa);
   }
+
+  lcr3(V2P(pgdir));
   return d;
 
 bad:
@@ -389,11 +391,31 @@ void
 page_fault(void)
 {
   uint va = rcr2();
+  pte_t *pte;
+  uint pa;
+  struct proc *curproc = myproc();
+
   if(va < 0) {
     panic("Invalid access");
     return;
   }
-  
+
+  pte = walkpgdir(curproc -> pgdir, (void*)va, 0);
+
+  pa = PTE_ADDR(*pte);
+
+  if(get_refcount(pa) > 1) {
+    char *mem = kalloc();
+    memmove(mem, (char*)P2V(pa), PGSIZE);
+    dec_refcount(pa);
+
+    *pte = V2P(mem) | (PTE_FLAGS(*pte) | PTE_W);
+  } else {
+    *pte |= PTE_W;
+  }
+
+  lcr3(V2P(curproc -> pgdir));
+
   return;
 }
 
